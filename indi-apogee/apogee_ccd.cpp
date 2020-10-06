@@ -147,6 +147,13 @@ bool ApogeeCCD::initProperties()
     IUFillSwitchVector(&ReadOutSP, ReadOutS, 2, getDeviceName(), "READOUT_QUALITY", "Readout Speed", OPTIONS_TAB, IP_WO,
                        ISR_1OFMANY, 0, IPS_IDLE);
 
+
+    IUFillSwitch(&OverscanS[0], "OVERSCAN_ON", "Overscan On", ISS_OFF);
+    IUFillSwitch(&OverscanS[1], "OVERSCAN_OFF", "Overscan Off", ISS_ON);
+    IUFillSwitchVector(&OverscanSP, OverscanS, 2, getDeviceName(), "OVERSCAN", "Overscan", OPTIONS_TAB, IP_WO,
+                       ISR_1OFMANY, 0, IPS_IDLE);
+
+
     IUFillSwitch(&PortTypeS[0], "USB_PORT", "USB", ISS_ON);
     IUFillSwitch(&PortTypeS[1], "NETWORK_PORT", "Network", ISS_OFF);
     IUFillSwitchVector(&PortTypeSP, PortTypeS, 2, getDeviceName(), "PORT_TYPE", "Port", MAIN_CONTROL_TAB, IP_RW,
@@ -177,6 +184,8 @@ bool ApogeeCCD::initProperties()
     IUFillSwitch(&FilterTypeS[TYPE_AFW31_17R], "TYPE_AFW31_17R", "AFW31 17R", ISS_OFF);
     IUFillSwitchVector(&FilterTypeSP, FilterTypeS, 5, getDeviceName(), "FILTER_TYPE", "Type", FILTER_TAB, IP_RW,
                        ISR_1OFMANY, 0, IPS_IDLE);
+    
+
 
     INDI::FilterInterface::initProperties(FILTER_TAB);
 
@@ -195,6 +204,7 @@ void ApogeeCCD::ISGetProperties(const char *dev)
     defineSwitch(&PortTypeSP);
     defineText(&NetworkInfoTP);
     defineSwitch(&FilterTypeSP);
+    defineSwitch(&OverscanSP);
 
     loadConfig(true, PortTypeSP.name);
     loadConfig(true, NetworkInfoTP.name);
@@ -212,6 +222,7 @@ bool ApogeeCCD::updateProperties()
         defineNumber(&CoolerNP);
         defineSwitch(&ReadOutSP);
         defineSwitch(&FanStatusSP);
+    	defineSwitch(&OverscanSP);
         getCameraParams();
 
         if (cfwFound)
@@ -300,6 +311,14 @@ bool ApogeeCCD::getCameraParams()
             CoolerS[1].s = ISS_ON;
 
         IDSetSwitch(&CoolerSP, nullptr);
+
+        if(ApgCam->IsOverscanDigitized())
+            OverscanS[0].s = ISS_ON;
+        else
+            OverscanS[1].s = ISS_ON;
+
+        IDSetSwitch(&OverscanSP, "Just set overscan.");
+
     }
     catch (std::runtime_error &err)
     {
@@ -478,7 +497,36 @@ bool ApogeeCCD::ISNewSwitch(const char *dev, const char *name, ISState *states, 
 
             return true;
         }
+
+        /* Overscan Setting */
+        if (!strcmp(name, OverscanSP.name))
+        {
+            
+            if (IUUpdateSwitch(&OverscanSP, states, names, n) < 0)
+                return false;
+
+            if(OverscanS[0].s == ISS_ON)
+            {
+                //Turn off overscan
+                //if(!isSimulation())
+                    
+                    //ApgCam->SetDigitizeOverscan(true);
+            }
+            else
+            {
+                //Turn on overscan
+                //if(!isSimulation())
+                   //ApgCam->SetDigitizeOverscan(false);
+            }
+            
+            return true;
+
+        }
+
+
+
     }
+
 
     //  Nobody has claimed this, so, ignore it
     return INDI::CCD::ISNewSwitch(dev, name, states, names, n);
