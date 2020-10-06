@@ -317,7 +317,7 @@ bool ApogeeCCD::getCameraParams()
         else
             OverscanS[1].s = ISS_ON;
 
-        IDSetSwitch(&OverscanSP, "Just set overscan.");
+        IDSetSwitch(&OverscanSP, nullptr);
 
     }
     catch (std::runtime_error &err)
@@ -508,15 +508,15 @@ bool ApogeeCCD::ISNewSwitch(const char *dev, const char *name, ISState *states, 
             if(OverscanS[0].s == ISS_ON)
             {
                 //Turn off overscan
-                //if(!isSimulation())
+                if(!isSimulation())
                     
-                    //ApgCam->SetDigitizeOverscan(true);
+                    ApgCam->SetDigitizeOverscan(true);
             }
             else
             {
                 //Turn on overscan
-                //if(!isSimulation())
-                   //ApgCam->SetDigitizeOverscan(false);
+                if(!isSimulation())
+                   ApgCam->SetDigitizeOverscan(false);
             }
             
             return true;
@@ -1518,6 +1518,16 @@ void ApogeeCCD::TimerHit()
             IDSetNumber(&FilterSlotNP, nullptr);
         }
     }
+
+
+/*
+    if(ApgCam->IsOverscanDigitized())
+        OverscanS[0].s = ISS_ON;
+    else
+        OverscanS[1].s = ISS_ON;
+
+    IDSetSwitch(&OverscanSP, "Checking overscan");
+*/
 
     SetTimer(POLLMS);
     return;
