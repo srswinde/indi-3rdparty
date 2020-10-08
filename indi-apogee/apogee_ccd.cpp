@@ -150,9 +150,12 @@ bool ApogeeCCD::initProperties()
 
     IUFillSwitch(&OverscanS[0], "OVERSCAN_ON", "Overscan On", ISS_OFF);
     IUFillSwitch(&OverscanS[1], "OVERSCAN_OFF", "Overscan Off", ISS_ON);
-    IUFillSwitchVector(&OverscanSP, OverscanS, 2, getDeviceName(), "OVERSCAN", "Overscan", OPTIONS_TAB, IP_WO,
+    IUFillSwitchVector(&OverscanSP, OverscanS, 2, getDeviceName(), "OVERSCAN", "Overscan State", IMAGE_SETTINGS_TAB, IP_WO,
                        ISR_1OFMANY, 0, IPS_IDLE);
 
+    IUFillNumber(&OverscanColsN[0], "OVERSCANCOLS", "Overscan Cols", "%02.0f", 0, 100, 1, 0);
+    IUFillNumberVector(&OverscanColsNP, OverscanColsN, 1, getDeviceName(), "OVERSCANCOLS", "Overscan Columns", 
+                       IMAGE_SETTINGS_TAB, IP_RO, 60, IPS_IDLE);
 
     IUFillSwitch(&PortTypeS[0], "USB_PORT", "USB", ISS_ON);
     IUFillSwitch(&PortTypeS[1], "NETWORK_PORT", "Network", ISS_OFF);
@@ -205,6 +208,7 @@ void ApogeeCCD::ISGetProperties(const char *dev)
     defineText(&NetworkInfoTP);
     defineSwitch(&FilterTypeSP);
     defineSwitch(&OverscanSP);
+    defineNumber(&OverscanColsNP);
 
     loadConfig(true, PortTypeSP.name);
     loadConfig(true, NetworkInfoTP.name);
@@ -302,6 +306,7 @@ bool ApogeeCCD::getCameraParams()
         sub_frame_y = ApgCam->GetMaxImgRows();
 
         temperature = ApgCam->GetTempCcd();
+    
 
         IUResetSwitch(&CoolerSP);
         Apg::CoolerStatus cStatus = ApgCam->GetCoolerStatus();
@@ -312,12 +317,6 @@ bool ApogeeCCD::getCameraParams()
 
         IDSetSwitch(&CoolerSP, nullptr);
 
-        if(ApgCam->IsOverscanDigitized())
-            OverscanS[0].s = ISS_ON;
-        else
-            OverscanS[1].s = ISS_ON;
-
-        IDSetSwitch(&OverscanSP, nullptr);
 
     }
     catch (std::runtime_error &err)
@@ -368,6 +367,24 @@ bool ApogeeCCD::getCameraParams()
     {
         LOGF_ERROR("get_MinExposureTime() failed. %s.", err.what());
         return false;
+    }
+
+    try
+    {
+        OverscanColsN[0].value = (double) ApgCam->GetNumOverscanCols();
+        if( OverscanColsN[0].value > 0)
+            OverscanColsNP.s = IPS_OK;
+        else
+            OverscanColsNP.s = IPS_IDLE;
+
+        IDSetNumber(&OverscanColsNP, nullptr);
+        LOGF_INFO("Overscan cols detected => %f", OverscanColsN[0].value);
+    }
+    catch (std::runtime_error &err)
+    { 
+        LOGF_ERROR("get_NumOverscanCols() failed. %s.", err.what());
+        return false;
+
     }
 
     int nbuf = PrimaryCCD.getXRes() * PrimaryCCD.getYRes() * PrimaryCCD.getBPP() / 8;
@@ -505,21 +522,13 @@ bool ApogeeCCD::ISNewSwitch(const char *dev, const char *name, ISState *states, 
             if (IUUpdateSwitch(&OverscanSP, states, names, n) < 0)
                 return false;
 
+            UpdateCCDFrame(PrimaryCCD.getSubX(), PrimaryCCD.getSubY(), PrimaryCCD.getSubW(), PrimaryCCD.getSubH());
+                
             if(OverscanS[0].s == ISS_ON)
-            {
-                //Turn off overscan
-                if(!isSimulation())
-                    
-                    ApgCam->SetDigitizeOverscan(true);
-            }
+                LOGF_INFO("Overscan columns now on %i", 1);
             else
-            {
-                //Turn on overscan
-                if(!isSimulation())
-                   ApgCam->SetDigitizeOverscan(false);
-            }
+                LOGF_INFO("Overscan columns now off %i", 0);
             
-            return true;
 
         }
 
@@ -689,15 +698,17 @@ bool ApogeeCCD::UpdateCCDFrame(int x, int y, int w, int h)
 
     long x_2 = x_1 + (w / PrimaryCCD.getBinX());
     long y_2 = y_1 + (h / PrimaryCCD.getBinY());
+    
+    uint16_t overscan_cols;
 
     if (x_2 > PrimaryCCD.getXRes() / PrimaryCCD.getBinX())
     {
-        LOGF_ERROR("Error: invalid width requested %ld", x_2);
+        LOGF_INFO("Error: invalid width requested %ld", x_2);
         return false;
     }
     else if (y_2 > PrimaryCCD.getYRes() / PrimaryCCD.getBinY())
     {
-        LOGF_ERROR("Error: invalid height request %ld", y_2);
+        LOGF_INFO("Error: invalid height request %ld", y_2);
         return false;
     }
 
@@ -712,7 +723,18 @@ bool ApogeeCCD::UpdateCCDFrame(int x, int y, int w, int h)
         {
             ApgCam->SetRoiStartCol(x_1);
             ApgCam->SetRoiStartRow(y_1);
-            ApgCam->SetRoiNumCols(imageWidth);
+
+            if(OverscanS[0].s == ISS_ON)
+            {
+                overscan_cols = ApgCam->GetNumOverscanCols();
+                LOGF_INFO("ROI width=%i overscan=%i", imageWidth, overscan_cols);
+                ApgCam->SetRoiNumCols(imageWidth+ ApgCam->GetNumOverscanCols());
+            }
+            else
+            {
+                LOGF_INFO("ROI width=%i no overscan", imageWidth);
+                ApgCam->SetRoiNumCols(imageWidth);
+            }
             ApgCam->SetRoiNumRows(imageHeight);
         }
     }
@@ -1520,6 +1542,7 @@ void ApogeeCCD::TimerHit()
     }
 
 
+    //IDMessage(getDeviceName(), "is overscan %i", ApgCam->IsOverscanDigitized());
 /*
     if(ApgCam->IsOverscanDigitized())
         OverscanS[0].s = ISS_ON;

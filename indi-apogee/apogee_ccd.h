@@ -81,6 +81,9 @@ class ApogeeCCD : public INDI::CCD, public INDI::FilterInterface
         ISwitch OverscanS[2];
         ISwitchVectorProperty OverscanSP;
 
+        INumber OverscanColsN[1];
+        INumberVectorProperty OverscanColsNP;
+
         ISwitchVectorProperty PortTypeSP;
         ISwitch PortTypeS[2];
         enum
